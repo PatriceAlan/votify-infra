@@ -1,0 +1,79 @@
+version: '3'
+
+services:
+  db:
+    image: "postgres:latest"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    restart: always
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - result-tier
+
+  redis:
+    image: "redis:latest"
+    ports:
+      - "6379:6379"
+    restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - poll-tier
+      - back-tier
+
+  poll:
+    build: ./poll
+    ports:
+      - "5000:80"
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - poll-tier
+      - back-tier
+
+  worker:
+    build: ./worker
+    restart: always
+    healthcheck:
+      test: ["CMD", "java", "-version"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - back-tier
+
+  result:
+    build: ./result
+    ports:
+      - "5001:80"
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - result-tier
+      - back-tier
+
+networks:
+  poll-tier:
+  result-tier:
+  back-tier:
+
+volumes:
+  db-data:
